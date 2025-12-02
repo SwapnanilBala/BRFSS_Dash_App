@@ -17,24 +17,21 @@ from utils.aggregation import (
 )
 
 # =========================================================
-# LOAD BRFSS CSV + REMOVE CALCULATED VARIABLES
+# LOAD CSV + REMOVE CALCULATED VARIABLES
 # =========================================================
 df = pd.read_csv(
     "/Users/swapnanilbala/Documents/Behavioral_Risk_Factor_Surveillance_System_(BRFSS)_Prevalence_Data_(2011_to_present)_20251129.csv",
     low_memory=False
 )
 
-# Remove calculated variables (they do NOT appear in prevalence dataset)
 df = df[~df["Question"].str.contains("variable calculated", case=False, na=False)]
 
 print("Unique Questions After Filtering:", len(df["Question"].unique()))
 print(df["Question"].unique()[:20])
 
 # =========================================================
-# UTILITY FUNCTIONS (REPLACE get_class_options/etc)
-# These ensure dropdown uses EXACT text from CSV
+# SIMPLE DROPDOWN HELPERS
 # =========================================================
-
 def get_class_options(df):
     return sorted(df["Class"].dropna().unique().tolist())
 
@@ -61,7 +58,7 @@ class_options = get_class_options(df)
 app = Dash(__name__)
 
 # =========================================================
-# Helper: FILTER "more/less/all"
+# Helper: MORE/LESS/ALL
 # =========================================================
 def apply_filter(summary, mode):
     if summary.empty:
@@ -74,7 +71,7 @@ def apply_filter(summary, mode):
 
 
 # =========================================================
-# Helper: ERROR BAR BAR CHART BUILDER
+# Helper: Standard Vertical Bar
 # =========================================================
 def build_ci_bar(summary, x_col, title):
     fig = px.bar(
@@ -107,7 +104,7 @@ app.layout = html.Div(style={'padding': '20px'}, children=[
     html.H2("BRFSS Interactive Dashboard"),
     html.H3("Select a Question"),
 
-    # CLASS -> TOPIC -> QUESTION
+    # CLASS
     dcc.Dropdown(
         id="class-dd",
         options=[{"label": c, "value": c} for c in class_options],
@@ -115,21 +112,34 @@ app.layout = html.Div(style={'padding': '20px'}, children=[
         style={'width': '60%'}
     ),
 
+    # TOPIC
     dcc.Dropdown(
         id="topic-dd",
         placeholder="Select Topic",
         style={'width': '60%', 'marginTop': '10px'}
     ),
 
+    # QUESTION
     dcc.Dropdown(
         id="question-dd",
         placeholder="Select Question",
         style={'width': '60%', 'marginTop': '10px'}
     ),
 
-    html.Div(id="selected-question-display",
-             style={'marginTop': '15px', 'fontSize': '18px',
-                    'color': 'darkblue'}),
+    html.Div(
+        id="selected-question-display",
+        style={
+            'marginTop': '20px',
+            'padding': '10px 15px',
+            'backgroundColor': '#1e1e1e',
+            'borderRadius': '8px',
+            'width': '60%',
+            'fontSize': '19px',
+            'fontWeight': 'bold',
+            'color': 'white',
+            'boxShadow': '0 0 8px rgba(255,255,255,0.15)'
+        }
+    ),
 
     html.Hr(),
 
@@ -262,7 +272,7 @@ app.layout = html.Div(style={'padding': '20px'}, children=[
 
 
 # =========================================================
-# CALLBACKS TO POPULATE TOPIC + QUESTION DROPDOWNS
+# CALLBACKS
 # =========================================================
 
 @app.callback(
@@ -286,21 +296,28 @@ def update_questions(selected_class, selected_topic):
 
 @app.callback(
     Output("selected-question-display", "children"),
-    Input("question-dd", "value")
+    Input("question-dd", "value"),
+    Input("topic-dd", "value"),
+    Input("class-dd", "value")
 )
-def show_selected(q):
-    return f"Selected Question: {q}" if q else ""
+def show_selected(q, topic, cls):
+    if not q:
+        return "No question selected"
+
+    return f"📌 {q}"
+
+
+
+# SAFE EMPTY
+def safe_empty_figure(title="No data available"):
+    return go.Figure(layout={"title": title})
 
 
 # =========================================================
 # PANEL CALLBACKS
 # =========================================================
 
-def safe_empty_figure(title="No data"):
-    return go.Figure(layout={"title": title})
-
-
-# OVERALL PANEL
+# OVERALL
 @app.callback(
     Output("overall-plot", "figure"),
     Input("question-dd", "value"),
@@ -316,7 +333,7 @@ def update_overall(q, mode):
     return build_ci_bar(summary, "Response", "Overall Summary")
 
 
-# GENDER PANEL
+# GENDER — ⭐ HORIZONTAL BAR
 @app.callback(
     Output("gender-plot", "figure"),
     Input("question-dd", "value"),
@@ -329,10 +346,30 @@ def update_gender(q, mode):
     summary = apply_filter(summary, mode)
     if summary.empty:
         return safe_empty_figure()
-    return build_ci_bar(summary, "Break_Out", "By Gender")
+
+    fig = px.bar(
+        summary,
+        y="Break_Out",
+        x="percent",
+        color="Response",
+        orientation="h",
+        title="By Gender",
+        hover_data={"percent":":.2f","ci_low":":.2f","ci_high":":.2f"}
+    )
+
+    fig.update_traces(
+        error_x=dict(
+            symmetric=False,
+            array=summary["ci_high"] - summary["percent"],
+            arrayminus=summary["percent"] - summary["ci_low"]
+        )
+    )
+
+    fig.update_layout(xaxis_title="Percent (%)")
+    return fig
 
 
-# AGE PANEL
+# AGE
 @app.callback(
     Output("age-plot", "figure"),
     Input("question-dd", "value"),
@@ -348,7 +385,7 @@ def update_age(q, mode):
     return build_ci_bar(summary, "Break_Out", "By Age Group")
 
 
-# RACE PANEL
+# RACE
 @app.callback(
     Output("race-plot", "figure"),
     Input("question-dd", "value"),
@@ -364,7 +401,7 @@ def update_race(q, mode):
     return build_ci_bar(summary, "Break_Out", "By Race")
 
 
-# EDUCATION PANEL
+# EDUCATION
 @app.callback(
     Output("education-plot", "figure"),
     Input("question-dd", "value"),
@@ -380,7 +417,7 @@ def update_education(q, mode):
     return build_ci_bar(summary, "Break_Out", "By Education")
 
 
-# INCOME PANEL
+# INCOME
 @app.callback(
     Output("income-plot", "figure"),
     Input("question-dd", "value"),
@@ -396,7 +433,7 @@ def update_income(q, mode):
     return build_ci_bar(summary, "Break_Out", "By Income")
 
 
-# TEMPORAL PANEL
+# TEMPORAL
 @app.callback(
     Output("temporal-plot", "figure"),
     Input("question-dd", "value"),
@@ -424,7 +461,7 @@ def update_temporal(q, mode):
     return fig
 
 
-# STATE PANEL
+# STATE — ⭐ USA HEATMAP
 @app.callback(
     Output("state-plot", "figure"),
     Input("question-dd", "value"),
@@ -435,14 +472,25 @@ def update_state(q, mode):
         return go.Figure()
     summary = aggregate_state(load_question(df, q))
     summary = apply_filter(summary, mode)
-    if summary.empty:
+    if summary.empty or "Locationabbr" not in summary.columns:
         return safe_empty_figure("No state data")
 
-    summary = summary.sort_values("Locationabbr")
-    return build_ci_bar(summary, "Locationabbr", "By State")
+    fig = px.choropleth(
+        summary,
+        locations="Locationabbr",
+        locationmode="USA-states",
+        color="percent",
+        hover_name="Locationabbr",
+        hover_data={"percent":":.2f", "ci_low":":.2f", "ci_high":":.2f"},
+        color_continuous_scale="Blues",
+        scope="usa",
+        title="Prevalence by State"
+    )
+
+    return fig
 
 
-# Debug test:
+# Debug print
 qdf = load_question(df, "Ever told you that you have a form of depression?")
 print("\n=== DEBUG LOAD_QUESTION OUTPUT ===")
 print(qdf.head())
