@@ -1,0 +1,141 @@
+/* ======================================
+   DARK THEME — BRFSS DASHBOARD
+   ====================================== */
+
+/* ----- GLOBAL BACKGROUND ----- */
+body {
+    background-color: #111111;   /* Pure dark */
+    font-family: 'Inter', sans-serif;
+    color: #e8e8e8;
+    margin: 0;
+    padding: 0;
+}
+
+/* ----- TITLES ----- */
+h2, h3 {
+    color: #fafafa;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+/* ----- MAIN TITLES ----- */
+h2 {
+    font-size: 28px;
+    margin-bottom: 5px;
+}
+
+/* ----- SECTION HEADERS ----- */
+h3 {
+    font-size: 20px;
+    margin-top: 20px;
+    color: #dcdcdc;
+}
+
+/* ----- SELECTED QUESTION TEXT ----- */
+#selected-question-display {
+    color: #56ccf2;
+    font-weight: 500;
+}
+
+/* ======================================
+   DROPDOWN STYLING
+   ====================================== */
+
+.Select-control {
+    background-color: #1e1e1e !important;
+    border: 1px solid #444 !important;
+    border-radius: 10px !important;
+    color: #ffffff !important;
+}
+
+.Select-placeholder {
+    color: #bbbbbb !important;
+}
+
+.Select-value-label {
+    color: #ffffff !important;
+}
+
+.Select-menu-outer {
+    background-color: #1e1e1e !important;
+    border: 1px solid #444 !important;
+}
+
+.Select-option {
+    background-color: #1e1e1e !important;
+    color: #dddddd !important;
+}
+
+.Select-option:hover {
+    background-color: #333333 !important;
+}
+
+/* ======================================
+   TABS
+   ====================================== */
+
+.dash-tabs {
+    background-color: #111111 !important;
+    border-bottom: 1px solid #222 !important;
+}
+
+.tab {
+    background-color: #1a1a1a !important;
+    color: #cccccc !important;
+    padding: 8px 20px !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+}
+
+.tab--selected {
+    background-color: #1f1f1f !important;
+    border-bottom: 3px solid #0abde3 !important; /* cyan highlight */
+    color: white !important;
+    font-weight: 600 !important;
+}
+
+/* ======================================
+   GRAPHS AREA
+   ====================================== */
+
+.graph-wrapper, .js-plotly-plot {
+    background-color: #1a1a1a !important;
+    padding: 15px;
+    border-radius: 12px;
+    margin-top: 15px;
+    box-shadow: 0 0 12px rgba(0,0,0,0.5);
+}
+
+/* ======================================
+   LOADING SPINNERS
+   ====================================== */
+
+.dash-spinner {
+    margin-top: 30px;
+}
+
+/* Make the spinner cyan (looks dope on dark) */
+.dash-loading > div {
+    border-color: #0abde3 !important;
+}
+
+/* ======================================
+   SCROLLBARS (dark mode smooth)
+   ====================================== */
+
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
