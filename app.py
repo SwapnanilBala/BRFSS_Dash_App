@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pandas as pd
 from dash import Dash, dcc, html, Input, Output
 import plotly.express as px
@@ -20,10 +22,20 @@ from utils.aggregation import (
 # =========================================================
 # LOAD CSV (NO FILTERS!)
 # =========================================================
-df = pd.read_csv(
-    "/Users/swapnanilbala/Documents/Behavioral_Risk_Factor_Surveillance_System_(BRFSS)_Prevalence_Data_(2011_to_present)_20251129.csv",
-    low_memory=False
+CSV_PATH = (
+    Path(__file__).resolve().parent
+    / "data"
+    / "raw"
+    / "Behavioral_Risk_Factor_Surveillance_System__BRFSS__Prevalence_Data__2011_to_present_.csv"
 )
+
+if not CSV_PATH.is_file():
+    raise FileNotFoundError(
+        f"BRFSS CSV not found: {CSV_PATH}. "
+        "Place the CDC CSV download in data/raw using the filename shown in README.md."
+    )
+
+df = pd.read_csv(CSV_PATH, low_memory=False)
 
 class_options = get_class_options(df)
 

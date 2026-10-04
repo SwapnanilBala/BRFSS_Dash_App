@@ -53,5 +53,24 @@ The data processing engine performs:
 ### ✔️ Clean Architecture  
 The application code is modular and production-friendly:
 
-**IMPORTANT**
-- The link to the .csv file that you have to link to the app.py incase you want to run it locally: https://data.cdc.gov/Behavioral-Risk-Factors/Behavioral-Risk-Factor-Surveillance-System-BRFSS-P/dttw-5yxu/about_data
+## Run locally
+
+1. Download the [BRFSS prevalence CSV from CDC](https://data.cdc.gov/api/views/dttw-5yxu/rows.csv?accessType=DOWNLOAD).
+2. Place the file at this location inside the repository, keeping the CDC download filename:
+
+   ```text
+   data/raw/Behavioral_Risk_Factor_Surveillance_System__BRFSS__Prevalence_Data__2011_to_present_.csv
+   ```
+
+3. From the repository root, install the dependencies and start the dashboard:
+
+   ```powershell
+   python -m pip install pandas numpy dash plotly
+   python app.py
+   ```
+
+4. Open [http://127.0.0.1:8050](http://127.0.0.1:8050) in your browser. Loading the full CSV at startup may take some time.
+
+The app resolves the CSV path relative to `app.py`, so it works without a machine-specific absolute path or a particular terminal working directory. If the file is missing, startup reports the expected location. Raw CSV files are excluded from Git.
+
+See the [official CDC dataset page](https://data.cdc.gov/Behavioral-Risk-Factors/Behavioral-Risk-Factor-Surveillance-System-BRFSS-P/dttw-5yxu) for the data description and column definitions.
