@@ -1,76 +1,69 @@
-# BRFSS Interactive Dashboard (2011–Present)
+# BRFSS Interactive Dashboard (2011–present)
 
-This project is an interactive analytical dashboard built using **Python, Pandas, Plotly Dash**, and **BRFSS (Behavioral Risk Factor Surveillance System)** prevalence data.  
+An interactive Plotly Dash app for exploring the CDC's **Behavioral Risk Factor Surveillance System**
+(BRFSS) prevalence data. Pick any survey question, then see how responses break down by gender, age,
+race, education, income, year and state, with confidence intervals on every estimate.
 
-The dashboard allows a user to explore national and state-level health indicators across multiple demographic groups with dynamically generated visualizations.
+<p align="center"><img src="docs/dashboard-age.png" alt="Dashboard showing 'Ever told you that you have a form of depression?' broken down by age group, with confidence-interval whiskers on each bar" width="100%"></p>
+<p align="center"><sub>"Ever told you that you have a form of depression?" by age group, from the full 2011–present CDC file.</sub></p>
 
----
+## What it does
 
-## 🚀 Project Overview
+- **Question picker:** a three-level cascade of Class → Topic → Question (for example, Chronic Health Indicators → Depression).
+- **Eight panels:** Overall, Gender, Age, Race, Education, Income, a year-by-year trend, and a state/territory map. A panel with no data for the chosen question says so instead of drawing an empty chart.
+- **Confidence intervals:** every bar carries ±2 standard-error whiskers, roughly a 95% interval.
+- **Top / bottom 3:** each panel can be narrowed to the three highest or lowest groups.
 
-This dashboard was developed collaboratively to recreate a fully functional, multi-panel, CDC-style analytics interface using raw BRFSS prevalence data (2011–present).
+## How the numbers are computed
 
-The app supports dynamic filtering, question hierarchy navigation, and auto-calculated prevalence estimates with confidence intervals.
+BRFSS publishes a prevalence percentage and a sample size per state, year and breakout group, not raw
+responses. To pool states into one estimate, each panel:
 
-Key features include:
+1. Drops the national rows (`US`, `UW`) so states aren't double-counted.
+2. Rebuilds each row's denominator from `Sample_Size × 100 / Data_value`.
+3. Pools respondents and denominators across states, so `percent = Σ respondents / Σ denominators`.
+4. Computes `SE = √(p(100 − p) / n)` and plots `p ± 2·SE`.
 
-### ✔️ Multi-tier Question Selection  
-Users can select:
-- **Class** (e.g., Demographics, Chronic Health Indicators, Risk Behaviors)  
-- **Topic**  
-- **Specific Question**
+First, `utils/merges.py` maps older and alternative response and breakout codes onto one set (for
+example, income brackets refined over the years), so a group means the same thing in every year.
 
-### ✔️ Dynamic Panel Rendering  
-Only relevant demographic panels appear based on availability of data:
-- Overall  
-- Gender  
-- Age Group  
-- Race  
-- Education  
-- Income  
-- Temporal (Year-by-Year Trend)  
-- State/Territory  
+## Run it
 
-Panels without valid BRFSS records **auto-hide** using dynamic tab logic.
-
-### ✔️ Interactive Visualizations  
-Each panel includes:
-- Bar charts with **confidence intervals (CI)**  
-- Yearly trend line plots  
-- Top/Bottom-3 filtering options  
-- Clean dark theme styling  
-- Fully reactive callbacks
-
-### ✔️ Full Preprocessing Pipeline  
-The data processing engine performs:
-- Type conversions (`Data_value`, `Sample_Size`)  
-- Response/Binary category merging  
-- Breakout ID harmonization across years  
-- Removal of national-level rollup rows  
-- Grouped weighted prevalence calculations  
-- Confidence interval estimation  
-
-### ✔️ Clean Architecture  
-The application code is modular and production-friendly:
-
-## Run locally
-
-1. Download the [BRFSS prevalence CSV from CDC](https://data.cdc.gov/api/views/dttw-5yxu/rows.csv?accessType=DOWNLOAD).
-2. Place the file at this location inside the repository, keeping the CDC download filename:
+1. Download the [BRFSS prevalence CSV from the CDC](https://data.cdc.gov/api/views/dttw-5yxu/rows.csv?accessType=DOWNLOAD). It's about 1 GB.
+2. Save it, keeping the CDC filename, at:
 
    ```text
    data/raw/Behavioral_Risk_Factor_Surveillance_System__BRFSS__Prevalence_Data__2011_to_present_.csv
    ```
 
-3. From the repository root, install the dependencies and start the dashboard:
+3. Install and start:
 
-   ```powershell
+   ```bash
    python -m pip install pandas numpy dash plotly
    python app.py
    ```
 
-4. Open [http://127.0.0.1:8050](http://127.0.0.1:8050) in your browser. Loading the full CSV at startup may take some time.
+4. Open [http://127.0.0.1:8050](http://127.0.0.1:8050). Loading the full CSV takes a while at startup; about 35 seconds in my last run.
 
-The app resolves the CSV path relative to `app.py`, so it works without a machine-specific absolute path or a particular terminal working directory. If the file is missing, startup reports the expected location. Raw CSV files are excluded from Git.
+Last run on Dash 4.4, pandas 3.0 and Plotly 7.1. The app resolves the CSV path relative to `app.py`,
+and if the file is missing, startup says where it expected it. Raw CSVs are git-ignored.
 
-See the [official CDC dataset page](https://data.cdc.gov/Behavioral-Risk-Factors/Behavioral-Risk-Factor-Surveillance-System-BRFSS-P/dttw-5yxu) for the data description and column definitions.
+See the [CDC dataset page](https://data.cdc.gov/Behavioral-Risk-Factors/Behavioral-Risk-Factor-Surveillance-System-BRFSS-P/dttw-5yxu)
+for the column definitions.
+
+## Structure
+
+| Path | What it does |
+|---|---|
+| `app.py` | Layout, the question cascade, and one callback per panel |
+| `utils/options.py` | Class, topic and question choices |
+| `utils/prepare.py` | Filters to one question and applies the merges |
+| `utils/merges.py` | Harmonises response and breakout IDs across years |
+| `utils/aggregation.py` | Pooled prevalence and confidence intervals per panel |
+| `assets/style.css` | Dashboard styling |
+| `BRFSS_Dashboard_Workflow_Notebook.ipynb` | Design rationale and workflow |
+| `BRFSS_Dashboard_Slides.pptx` | Presentation |
+
+## Stack
+
+Python · pandas · NumPy · Plotly Dash
