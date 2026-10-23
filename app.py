@@ -32,6 +32,24 @@ QUESTION_TEXT = {
     for q in questions
 }
 
+# Half the questions end in the same parenthetical. Carrying it in the dropdown
+# and the banner costs 53 characters on every one of them and says nothing that
+# distinguishes one question from another, so it becomes a note instead. Doing
+# this drops the median question from 94 characters to 57, and the longest from
+# 172 to 117.
+DERIVED_SUFFIX = "(variable calculated from one or more BRFSS questions)"
+DERIVED_NOTE = "Derived variable, calculated from one or more BRFSS questions."
+
+
+def _shorten(text):
+    return text.replace(DERIVED_SUFFIX, "").strip().rstrip(",;")
+
+
+QUESTION_SHORT = {qid: _shorten(t) for qid, t in QUESTION_TEXT.items()}
+QUESTION_DERIVED = {
+    qid: DERIVED_SUFFIX in t for qid, t in QUESTION_TEXT.items()
+}
+
 # Each row is [group, response, percent, ci_low, ci_high]; group is "" on the
 # overall panel, a break-out label on the demographic ones, a year on the
 # temporal panel and a state abbreviation on the map.
@@ -285,16 +303,26 @@ app.layout = html.Div(className="page", children=[
     ]),
 
     # -------------------- QUESTION CASCADE --------------------
+    # Questions run to 117 characters even with the boilerplate stripped, so
+    # they get a row to themselves rather than a third of one.
     html.Div(className="selectors", children=[
         selector("Class", dcc.Dropdown(id="class-dd", options=[
             {"label": c, "value": c} for c in CLASSES
         ], placeholder="Select a class", clearable=False)),
         selector("Topic", dcc.Dropdown(
             id="topic-dd", placeholder="Select a topic", clearable=False)),
-        html.Div(className="selector selector-wide", children=[
-            html.Label("Question", className="selector-label"),
-            dcc.Dropdown(id="question-dd", placeholder="Select a question", clearable=False),
-        ]),
+    ]),
+
+    html.Div(className="selectors selectors-question", children=[
+        selector("Question", dcc.Dropdown(
+            id="question-dd", placeholder="Select a question", clearable=False)),
+    ]),
+
+    # The dropdown is a single line and still truncates the longest questions;
+    # this is where the full text is always readable.
+    html.Div(id="question-banner", className="question-banner hidden", children=[
+        html.P(id="question-banner-text", className="question-banner-text"),
+        html.P(id="question-banner-note", className="question-banner-note"),
     ]),
 
     # -------------------- RESPONSE + FILTER --------------------
@@ -377,7 +405,22 @@ def update_topics(selected_class):
 )
 def update_questions(selected_class, selected_topic):
     questions = CLASSES.get(selected_class, {}).get(selected_topic, [])
-    return [{"label": q["text"], "value": q["id"]} for q in questions], None
+    return [
+        {"label": QUESTION_SHORT[q["id"]], "value": q["id"]} for q in questions
+    ], None
+
+
+@app.callback(
+    Output("question-banner", "className"),
+    Output("question-banner-text", "children"),
+    Output("question-banner-note", "children"),
+    Input("question-dd", "value"),
+)
+def update_question_banner(question_id):
+    if not question_id:
+        return "question-banner hidden", "", ""
+    note = DERIVED_NOTE if QUESTION_DERIVED[question_id] else ""
+    return "question-banner", QUESTION_SHORT[question_id], note
 
 
 @app.callback(

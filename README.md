@@ -11,7 +11,7 @@ race, education, income, year and state, with confidence intervals on every esti
 
 ## What it does
 
-- **Question picker:** a three-level cascade of Class → Topic → Question (for example, Chronic Health Indicators → Depression).
+- **Question picker:** a three-level cascade of Class → Topic → Question (for example, Chronic Health Indicators → Depression). Questions run to 117 characters, so the picker gets a row of its own and the selected question is repeated in full underneath, where it can wrap. Half of them end in the same parenthetical — `(variable calculated from one or more BRFSS questions)` — which is shown once as a note rather than on every label.
 - **One screen per question:** an overall figure, a year-by-year trend, breakdowns by gender, age, race, education and income, and a state map — all visible together, no tab-hopping.
 - **One response at a time:** pick which answer to read. Most questions are yes/no, where drawing both at once spends four-fifths of the ink on the complement of what you asked.
 - **Visible confidence intervals:** each estimate is a dot with its 95% interval drawn through it, on an axis framed to the data. Three quarters of the intervals in this dataset are under one percentage point wide, so a 0–100 axis hides them entirely.
