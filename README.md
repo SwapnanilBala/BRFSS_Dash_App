@@ -6,15 +6,17 @@ race, education, income, year and state, with confidence intervals on every esti
 
 **Live: [brfssdashanalysis.vercel.app](https://brfssdashanalysis.vercel.app/)**
 
-<p align="center"><img src="docs/dashboard-age.png" alt="Dashboard showing 'Ever told you that you have a form of depression?' broken down by age group, with confidence-interval whiskers on each bar" width="100%"></p>
-<p align="center"><sub>"Ever told you that you have a form of depression?" by age group, from the full 2011–present CDC file.</sub></p>
+<p align="center"><img src="docs/dashboard.png" alt="Dashboard showing 'Ever told you that you have a form of depression?' — an overall figure of 17.0% with its confidence interval, a trend sparkline, and dot-and-interval breakdowns by gender and age group" width="100%"></p>
+<p align="center"><sub>Every breakdown for one question on a single screen, from the full 2011–present CDC file.</sub></p>
 
 ## What it does
 
 - **Question picker:** a three-level cascade of Class → Topic → Question (for example, Chronic Health Indicators → Depression).
-- **Eight panels:** Overall, Gender, Age, Race, Education, Income, a year-by-year trend, and a state/territory map. A panel with no data for the chosen question says so instead of drawing an empty chart.
-- **Confidence intervals:** every bar carries ±2 standard-error whiskers, roughly a 95% interval.
-- **Top / bottom 3:** each panel can be narrowed to the three highest or lowest groups.
+- **One screen per question:** an overall figure, a year-by-year trend, breakdowns by gender, age, race, education and income, and a state map — all visible together, no tab-hopping.
+- **One response at a time:** pick which answer to read. Most questions are yes/no, where drawing both at once spends four-fifths of the ink on the complement of what you asked.
+- **Visible confidence intervals:** each estimate is a dot with its 95% interval drawn through it, on an axis framed to the data. Three quarters of the intervals in this dataset are under one percentage point wide, so a 0–100 axis hides them entirely.
+- **Sorted, labelled groups:** every group carries its value, ordered by size, so the ranking is readable without counting gridlines.
+- **Top / bottom 3:** narrow any breakdown to its three highest or lowest groups.
 
 ## How the numbers are computed
 
@@ -90,6 +92,7 @@ deployment.
 | Path | What it does |
 |---|---|
 | `app.py` | Layout, the question cascade, and one callback per panel |
+| `assets/style.css` | Design tokens, card grid and responsive breakpoints |
 | `api/index.py` | Vercel entry point — exposes the Flask server |
 | `vercel.json` | Function config and catch-all rewrite |
 | `pipeline/build.py` | Normalises the survey file and pre-computes every panel |
@@ -97,7 +100,6 @@ deployment.
 | `data/panels.json` | Pre-aggregated results the app actually reads, 0.68 MB |
 | `utils/merges.py` | Harmonises response and breakout IDs across years |
 | `utils/prepare.py` · `utils/options.py` · `utils/aggregation.py` | The original per-question implementation, now the reference `--verify` checks the pipeline against |
-| `assets/style.css` | Dashboard styling |
 | `BRFSS_Dashboard_Workflow_Notebook.ipynb` | Design rationale and workflow |
 | `BRFSS_Dashboard_Slides.pptx` | Presentation |
 
