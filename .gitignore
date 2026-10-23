@@ -1,2 +1,21 @@
+# Raw CDC downloads (~1 GB) and the normalized intermediate
+data/raw/
 data/*.csv
 data/**/*.csv
+data/brfss_clean.parquet
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.idea/
+
+# Vercel
+.vercel/

@@ -1,99 +1,184 @@
+import json
 from pathlib import Path
 
-import pandas as pd
 from dash import Dash, dcc, html, Input, Output
-import plotly.express as px
 import plotly.graph_objects as go
 
-# utils
-from utils.prepare import load_question
-from utils.options import get_class_options, get_topic_options, get_question_options
-from utils.aggregation import (
-    aggregate_overall,
-    aggregate_gender,
-    aggregate_age,
-    aggregate_race,
-    aggregate_education,
-    aggregate_income,
-    aggregate_temporal,
-    aggregate_state
-)
-
 # =========================================================
-# LOAD CSV (NO FILTERS!)
+# LOAD PRE-AGGREGATED PANELS
 # =========================================================
-CSV_PATH = (
-    Path(__file__).resolve().parent
-    / "data"
-    / "raw"
-    / "Behavioral_Risk_Factor_Surveillance_System__BRFSS__Prevalence_Data__2011_to_present_.csv"
-)
+# pipeline/build.py has already pooled every state, applied the code merges and
+# computed the confidence intervals, so there is nothing to aggregate here: a
+# panel is a dict lookup. That keeps this importable without pandas, numpy or
+# pyarrow, which is what lets it fit in a serverless function.
+PANELS_PATH = Path(__file__).resolve().parent / "data" / "panels.json"
 
-if not CSV_PATH.is_file():
+if not PANELS_PATH.is_file():
     raise FileNotFoundError(
-        f"BRFSS CSV not found: {CSV_PATH}. "
-        "Place the CDC CSV download in data/raw using the filename shown in README.md."
+        f"Pre-aggregated panels not found: {PANELS_PATH}. "
+        "Run `python -m pipeline.build` to generate them (see README.md)."
     )
 
-df = pd.read_csv(CSV_PATH, low_memory=False)
+with PANELS_PATH.open(encoding="utf-8") as fh:
+    BUNDLE = json.load(fh)
 
-class_options = get_class_options(df)
+PANELS = BUNDLE["panels"]
+CLASSES = BUNDLE["index"]["classes"]
+
+# question id -> question text, for the selected-question banner
+QUESTION_TEXT = {
+    q["id"]: q["text"]
+    for topics in CLASSES.values()
+    for questions in topics.values()
+    for q in questions
+}
+
+# Each row is [group, response, percent, ci_low, ci_high]; group is "" on the
+# overall panel, a break-out label on the demographic ones, a year on the
+# temporal panel and a state abbreviation on the map.
+GROUP, RESPONSE, PERCENT, CI_LOW, CI_HIGH = range(5)
+
+# panel id -> (tab label, x-axis title)
+TABS = [
+    ("overall", "Overall", "Response"),
+    ("gender", "Gender", "Gender"),
+    ("age", "Age", "Age group"),
+    ("race", "Race", "Race"),
+    ("education", "Education", "Education"),
+    ("income", "Income", "Income"),
+    ("temporal", "Temporal", "Year"),
+    ("state", "State / Territory Heatmap", "State"),
+]
+
+FILTER_OPTIONS = [
+    {"label": "Show All", "value": "all"},
+    {"label": "More (Top 3)", "value": "more"},
+    {"label": "Less (Bottom 3)", "value": "less"},
+]
+
+EMPTY_TITLES = {
+    "overall": "No aggregation possible",
+    "gender": "No gender data",
+    "age": "No age data",
+    "race": "No race data",
+    "education": "No education data",
+    "income": "No income data",
+    "temporal": "No temporal data",
+    "state": "No state data",
+}
+
 
 # =========================================================
 # HELPERS
 # =========================================================
 
-def apply_filter(summary, mode):
-    if summary.empty:
-        return summary
+def apply_filter(rows, mode):
+    if not rows:
+        return rows
     if mode == "more":
-        return summary.sort_values("percent", ascending=False).head(3)
+        return sorted(rows, key=lambda r: r[PERCENT], reverse=True)[:3]
     if mode == "less":
-        return summary.sort_values("percent", ascending=True).head(3)
-    return summary
+        return sorted(rows, key=lambda r: r[PERCENT])[:3]
+    return rows
 
 
-def build_ci_bar(summary, x_col, title):
-    fig = px.bar(
-        summary,
-        x=x_col,
-        y="percent",
-        color="Response",
-        barmode="group",
-        title=title,
-        hover_data={"percent":":.2f","ci_low":":.2f","ci_high":":.2f"}
-    )
+def panel_rows(question_id, panel):
+    if not question_id:
+        return []
+    return PANELS.get(question_id, {}).get(panel, [])
 
-    fig.update_traces(
-        error_y=dict(
+
+def build_ci_bar(rows, title, x_col, x_title, orientation="v"):
+    """Grouped bars, one trace per response, with +/- 2 SE whiskers."""
+    by_response = {}
+    for row in rows:
+        by_response.setdefault(row[RESPONSE], []).append(row)
+
+    fig = go.Figure()
+    for response, group_rows in by_response.items():
+        labels = [str(r[x_col]) for r in group_rows]
+        values = [r[PERCENT] for r in group_rows]
+        error = dict(
+            type="data",
             symmetric=False,
-            array=summary["ci_high"] - summary["percent"],
-            arrayminus=summary["percent"] - summary["ci_low"]
+            array=[r[CI_HIGH] - r[PERCENT] for r in group_rows],
+            arrayminus=[r[PERCENT] - r[CI_LOW] for r in group_rows],
         )
-    )
-    fig.update_layout(yaxis_title="Percent (%)")
+        bounds = [(r[CI_LOW], r[CI_HIGH]) for r in group_rows]
+        label_axis, value_axis = ("y", "x") if orientation == "h" else ("x", "y")
+        hover = (
+            f"%{{{label_axis}}}<br>{response}<br>"
+            f"%{{{value_axis}:.2f}}%<br>"
+            "CI %{customdata[0]:.2f} – %{customdata[1]:.2f}<extra></extra>"
+        )
+
+        fig.add_trace(go.Bar(
+            name=str(response),
+            customdata=bounds,
+            hovertemplate=hover,
+            **(
+                {"y": labels, "x": values, "orientation": "h", "error_x": error}
+                if orientation == "h"
+                else {"x": labels, "y": values, "error_y": error}
+            ),
+        ))
+
+    if orientation == "h":
+        fig.update_layout(barmode="group", title=title,
+                          xaxis_title="Percent (%)", yaxis_title=x_title)
+    else:
+        fig.update_layout(barmode="group", title=title,
+                          xaxis_title=x_title, yaxis_title="Percent (%)")
     return fig
 
 
-def build_geo_map(summary):
+def build_temporal_line(rows, title):
+    by_response = {}
+    for row in rows:
+        by_response.setdefault(row[RESPONSE], []).append(row)
+
+    fig = go.Figure()
+    for response, group_rows in by_response.items():
+        points = sorted(group_rows, key=lambda r: int(r[GROUP]))
+        fig.add_trace(go.Scatter(
+            name=str(response),
+            x=[int(r[GROUP]) for r in points],
+            y=[r[PERCENT] for r in points],
+            mode="lines+markers",
+        ))
+    fig.update_layout(title=title, xaxis_title="Year", yaxis_title="Percent (%)")
+    return fig
+
+
+def build_geo_map(rows):
     """Option B — pick the HIGHEST RESPONSE per state."""
-    if summary.empty:
+    if not rows:
         return go.Figure(layout={"title": "No state-level data available"})
 
-    best = summary.sort_values("percent", ascending=False).groupby("Locationabbr").head(1)
-    best = best[best["Locationabbr"].str.len() == 2]  # keep only valid states
+    best = {}
+    for row in sorted(rows, key=lambda r: r[PERCENT], reverse=True):
+        state = row[GROUP]
+        if len(state) == 2 and state not in best:  # keep only valid states
+            best[state] = row
 
-    fig = px.choropleth(
-        best,
-        locations="Locationabbr",
+    if not best:
+        return go.Figure(layout={"title": "No state-level data available"})
+
+    states = list(best)
+    fig = go.Figure(go.Choropleth(
+        locations=states,
         locationmode="USA-states",
-        color="percent",
-        scope="usa",
-        color_continuous_scale="Plasma",
-        hover_name="Locationabbr",
-        title="State-Level Prevalence (Highest Response per State)"
+        z=[best[s][PERCENT] for s in states],
+        text=[best[s][RESPONSE] for s in states],
+        colorscale="Plasma",
+        colorbar_title="Percent",
+        hovertemplate="%{location}<br>%{text}<br>%{z:.2f}%<extra></extra>",
+    ))
+    fig.update_layout(
+        geo_scope="usa",
+        title="State-Level Prevalence (Highest Response per State)",
+        margin={"l": 0, "r": 0, "t": 50, "b": 0},
     )
-    fig.update_layout(margin={"l":0,"r":0,"t":50,"b":0})
     return fig
 
 
@@ -101,6 +186,21 @@ def build_geo_map(summary):
 # DASH APP
 # =========================================================
 app = Dash(__name__)
+server = app.server  # WSGI entry point for Vercel / gunicorn
+
+
+def tab_body(panel):
+    return [
+        html.Br(),
+        dcc.Dropdown(
+            id=f"{panel}-filter",
+            options=FILTER_OPTIONS,
+            value="all",
+            style={'width': '25%'}
+        ),
+        dcc.Graph(id=f"{panel}-plot")
+    ]
+
 
 app.layout = html.Div(style={'padding': '20px'}, children=[
 
@@ -110,7 +210,7 @@ app.layout = html.Div(style={'padding': '20px'}, children=[
     html.Div(style={'display': 'flex', 'gap': '15px'}, children=[
         dcc.Dropdown(
             id="class-dd",
-            options=[{"label": c, "value": c} for c in class_options],
+            options=[{"label": c, "value": c} for c in CLASSES],
             placeholder="Select Class",
             style={'width': '30%'}
         ),
@@ -143,134 +243,8 @@ app.layout = html.Div(style={'padding': '20px'}, children=[
 
     # -------------------- TABS --------------------
     dcc.Tabs(id="tabs", children=[
-
-        # ==================== OVERALL ====================
-        dcc.Tab(label="Overall", children=[
-            html.Br(),
-            dcc.Dropdown(
-                id="overall-filter",
-                options=[
-                    {"label": "Show All", "value": "all"},
-                    {"label": "More (Top 3)", "value": "more"},
-                    {"label": "Less (Bottom 3)", "value": "less"}
-                ],
-                value="all",
-                style={'width': '25%'}
-            ),
-            dcc.Graph(id="overall-plot")
-        ]),
-
-        # ==================== GENDER ====================
-        dcc.Tab(label="Gender", children=[
-            html.Br(),
-            dcc.Dropdown(
-                id="gender-filter",
-                options=[
-                    {"label": "Show All", "value": "all"},
-                    {"label": "More (Top 3)", "value": "more"},
-                    {"label": "Less (Bottom 3)", "value": "less"}
-                ],
-                value="all",
-                style={'width': '25%'}
-            ),
-            dcc.Graph(id="gender-plot")
-        ]),
-
-        # ==================== AGE ====================
-        dcc.Tab(label="Age", children=[
-            html.Br(),
-            dcc.Dropdown(
-                id="age-filter",
-                options=[
-                    {"label": "Show All", "value": "all"},
-                    {"label": "More (Top 3)", "value": "more"},
-                    {"label": "Less (Bottom 3)", "value": "less"}
-                ],
-                value="all",
-                style={'width': '25%'}
-            ),
-            dcc.Graph(id="age-plot")
-        ]),
-
-        # ==================== RACE ====================
-        dcc.Tab(label="Race", children=[
-            html.Br(),
-            dcc.Dropdown(
-                id="race-filter",
-                options=[
-                    {"label": "Show All", "value": "all"},
-                    {"label": "More (Top 3)", "value": "more"},
-                    {"label": "Less (Bottom 3)", "value": "less"}
-                ],
-                value="all",
-                style={'width': '25%'}
-            ),
-            dcc.Graph(id="race-plot")
-        ]),
-
-        # ==================== EDUCATION ====================
-        dcc.Tab(label="Education", children=[
-            html.Br(),
-            dcc.Dropdown(
-                id="education-filter",
-                options=[
-                    {"label": "Show All", "value": "all"},
-                    {"label": "More (Top 3)", "value": "more"},
-                    {"label": "Less (Bottom 3)", "value": "less"}
-                ],
-                value="all",
-                style={'width': '25%'}
-            ),
-            dcc.Graph(id="education-plot")
-        ]),
-
-        # ==================== INCOME ====================
-        dcc.Tab(label="Income", children=[
-            html.Br(),
-            dcc.Dropdown(
-                id="income-filter",
-                options=[
-                    {"label": "Show All", "value": "all"},
-                    {"label": "More (Top 3)", "value": "more"},
-                    {"label": "Less (Bottom 3)", "value": "less"}
-                ],
-                value="all",
-                style={'width': '25%'}
-            ),
-            dcc.Graph(id="income-plot")
-        ]),
-
-        # ==================== TEMPORAL ====================
-        dcc.Tab(label="Temporal", children=[
-            html.Br(),
-            dcc.Dropdown(
-                id="temporal-filter",
-                options=[
-                    {"label": "Show All", "value": "all"},
-                    {"label": "More (Top 3)", "value": "more"},
-                    {"label": "Less (Bottom 3)", "value": "less"}
-                ],
-                value="all",
-                style={'width': '25%'}
-            ),
-            dcc.Graph(id="temporal-plot")
-        ]),
-
-        # ==================== STATE MAP ====================
-        dcc.Tab(label="State / Territory Heatmap", children=[
-            html.Br(),
-            dcc.Dropdown(
-                id="state-filter",
-                options=[
-                    {"label": "Show All", "value": "all"},
-                    {"label": "More (Top 3)", "value": "more"},
-                    {"label": "Less (Bottom 3)", "value": "less"}
-                ],
-                value="all",
-                style={'width': '25%'}
-            ),
-            dcc.Graph(id="state-map")
-        ])
+        dcc.Tab(label=label, children=tab_body(panel))
+        for panel, label, _ in TABS
     ])
 ])
 
@@ -284,8 +258,7 @@ app.layout = html.Div(style={'padding': '20px'}, children=[
     Input("class-dd", "value")
 )
 def update_topics(c):
-    topics = get_topic_options(df, c)
-    return [{"label": t, "value": t} for t in topics]
+    return [{"label": t, "value": t} for t in CLASSES.get(c, {})]
 
 
 @app.callback(
@@ -294,8 +267,8 @@ def update_topics(c):
     Input("topic-dd", "value")
 )
 def update_questions(c, t):
-    qs = get_question_options(df, c, t)
-    return [{"label": q, "value": q} for q in qs]
+    questions = CLASSES.get(c, {}).get(t, [])
+    return [{"label": q["text"], "value": q["id"]} for q in questions]
 
 
 @app.callback(
@@ -305,126 +278,43 @@ def update_questions(c, t):
 def show_q(q):
     if not q:
         return "📌 No question selected"
-    return f"📌 Selected Question: {q}"
+    return f"📌 Selected Question: {QUESTION_TEXT.get(q, q)}"
 
 
 # =========================================================
 # PANEL CALLBACKS
 # =========================================================
+# One per tab, registered from TABS so the eight panels can't drift apart.
 
-@app.callback(
-    Output("overall-plot", "figure"),
-    Input("question-dd", "value"),
-    Input("overall-filter", "value")
-)
-def update_overall(q, mode):
-    if not q:
-        return go.Figure()
-    summary = apply_filter(aggregate_overall(load_question(df, q)), mode)
-    if summary.empty:
-        return go.Figure(layout={"title":"No aggregation possible"})
-    return build_ci_bar(summary, "Response", "Overall Summary")
+def register_panel(panel, x_title):
+    @app.callback(
+        Output(f"{panel}-plot", "figure"),
+        Input("question-dd", "value"),
+        Input(f"{panel}-filter", "value"),
+    )
+    def update_panel(question_id, mode, panel=panel, x_title=x_title):
+        if not question_id:
+            return go.Figure()
 
+        rows = apply_filter(panel_rows(question_id, panel), mode)
+        if not rows:
+            return go.Figure(layout={"title": EMPTY_TITLES[panel]})
 
-@app.callback(
-    Output("gender-plot", "figure"),
-    Input("question-dd", "value"),
-    Input("gender-filter", "value")
-)
-def update_gender(q, mode):
-    if not q:
-        return go.Figure()
-    summary = apply_filter(aggregate_gender(load_question(df, q)), mode)
-    if summary.empty:
-        return go.Figure(layout={"title":"No gender data"})
-    return px.bar(summary, y="Break_Out", x="percent", color="Response",
-                  orientation="h", title="By Gender")
+        if panel == "state":
+            return build_geo_map(rows)
+        if panel == "temporal":
+            return build_temporal_line(rows, "Temporal Trend")
+        if panel == "overall":
+            return build_ci_bar(rows, "Overall Summary", RESPONSE, x_title)
+        if panel == "gender":
+            return build_ci_bar(rows, "By Gender", GROUP, x_title, orientation="h")
+        return build_ci_bar(rows, f"By {x_title}", GROUP, x_title)
 
-
-@app.callback(
-    Output("age-plot", "figure"),
-    Input("question-dd", "value"),
-    Input("age-filter", "value")
-)
-def update_age(q, mode):
-    if not q:
-        return go.Figure()
-    summary = apply_filter(aggregate_age(load_question(df, q)), mode)
-    if summary.empty:
-        return go.Figure(layout={"title":"No age data"})
-    return build_ci_bar(summary, "Break_Out", "By Age Group")
+    return update_panel
 
 
-@app.callback(
-    Output("race-plot", "figure"),
-    Input("question-dd", "value"),
-    Input("race-filter", "value")
-)
-def update_race(q, mode):
-    if not q:
-        return go.Figure()
-    summary = apply_filter(aggregate_race(load_question(df, q)), mode)
-    if summary.empty:
-        return go.Figure(layout={"title":"No race data"})
-    return build_ci_bar(summary, "Break_Out", "By Race")
-
-
-@app.callback(
-    Output("education-plot", "figure"),
-    Input("question-dd", "value"),
-    Input("education-filter", "value")
-)
-def update_education(q, mode):
-    if not q:
-        return go.Figure()
-    summary = apply_filter(aggregate_education(load_question(df, q)), mode)
-    if summary.empty:
-        return go.Figure(layout={"title":"No education data"})
-    return build_ci_bar(summary, "Break_Out", "By Education")
-
-
-@app.callback(
-    Output("income-plot", "figure"),
-    Input("question-dd", "value"),
-    Input("income-filter", "value")
-)
-def update_income(q, mode):
-    if not q:
-        return go.Figure()
-    summary = apply_filter(aggregate_income(load_question(df, q)), mode)
-    if summary.empty:
-        return go.Figure(layout={"title":"No income data"})
-    return build_ci_bar(summary, "Break_Out", "By Income")
-
-
-@app.callback(
-    Output("temporal-plot", "figure"),
-    Input("question-dd", "value"),
-    Input("temporal-filter", "value")
-)
-def update_temporal(q, mode):
-    if not q:
-        return go.Figure()
-    summary = apply_filter(aggregate_temporal(load_question(df, q)), mode)
-    if summary.empty:
-        return go.Figure(layout={"title":"No temporal data"})
-    summary = summary.sort_values("Year")
-    return px.line(summary, x="Year", y="percent", color="Response", markers=True,
-                   title="Temporal Trend")
-
-
-@app.callback(
-    Output("state-map", "figure"),
-    Input("question-dd", "value"),
-    Input("state-filter", "value")
-)
-def update_state(q, mode):
-    if not q:
-        return go.Figure()
-    summary = apply_filter(aggregate_state(load_question(df, q)), mode)
-    if summary.empty:
-        return go.Figure(layout={"title":"No state data"})
-    return build_geo_map(summary)
+for _panel, _label, _x_title in TABS:
+    register_panel(_panel, _x_title)
 
 
 if __name__ == "__main__":

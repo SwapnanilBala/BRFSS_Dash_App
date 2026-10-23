@@ -1,0 +1,21 @@
+# Keep the serverless bundle to the app, the 0.68 MB panels.json and the CSS.
+# Everything here is build-time or documentation only.
+
+# Survey data — the deployed app reads data/panels.json and nothing else.
+data/brfss_raw.parquet
+data/brfss_clean.parquet
+data/raw/
+
+# Build-time only
+pipeline/
+utils/
+requirements-dev.txt
+
+# Docs and coursework
+docs/
+*.ipynb
+*.pptx
+*.pdf
+.ipynb_checkpoints/
+
+.idea/

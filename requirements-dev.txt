@@ -1,0 +1,6 @@
+# Everything the build pipeline needs, on top of requirements.txt.
+# Only needed to regenerate data/panels.json, never at request time.
+-r requirements.txt
+pandas==3.0.5
+numpy==2.5.3
+pyarrow==26.0.0

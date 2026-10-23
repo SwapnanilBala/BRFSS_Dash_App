@@ -1,0 +1,6 @@
+# Runtime only — what Vercel installs to serve the dashboard.
+# The pre-aggregated data/panels.json means no pandas, numpy or pyarrow here,
+# which keeps the serverless bundle well under Vercel's 250 MB limit.
+# Pipeline dependencies live in requirements-dev.txt.
+dash==4.4.0
+plotly==7.1.0

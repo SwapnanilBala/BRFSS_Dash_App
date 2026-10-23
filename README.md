@@ -29,41 +29,74 @@ example, income brackets refined over the years), so a group means the same thin
 
 ## Run it
 
-1. Download the [BRFSS prevalence CSV from the CDC](https://data.cdc.gov/api/views/dttw-5yxu/rows.csv?accessType=DOWNLOAD). It's about 1 GB.
-2. Save it, keeping the CDC filename, at:
+The repo ships with everything the dashboard needs, so a clone runs as-is:
 
-   ```text
-   data/raw/Behavioral_Risk_Factor_Surveillance_System__BRFSS__Prevalence_Data__2011_to_present_.csv
-   ```
+```bash
+python -m pip install -r requirements.txt
+python app.py
+```
 
-3. Install and start:
+Open [http://127.0.0.1:8050](http://127.0.0.1:8050). Startup is instant: the app reads
+`data/panels.json` (0.68 MB of pre-computed results) and nothing else. It does not import
+pandas, numpy or pyarrow at all.
 
-   ```bash
-   python -m pip install pandas numpy dash plotly
-   python app.py
-   ```
+### Rebuilding the data
 
-4. Open [http://127.0.0.1:8050](http://127.0.0.1:8050). Loading the full CSV takes a while at startup; about 35 seconds in my last run.
+`data/panels.json` is generated. You only need to regenerate it if you change the
+statistics or the CDC publishes a new year.
 
-Last run on Dash 4.4, pandas 3.0 and Plotly 7.1. The app resolves the CSV path relative to `app.py`,
-and if the file is missing, startup says where it expected it. Raw CSVs are git-ignored.
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pipeline.build --verify
+```
 
-See the [CDC dataset page](https://data.cdc.gov/Behavioral-Risk-Factors/Behavioral-Risk-Factor-Surveillance-System-BRFSS-P/dttw-5yxu)
-for the column definitions.
+That reads `data/brfss_raw.parquet` (21 MB, committed), applies the merges, pools the
+states and writes `data/panels.json`. `--verify` re-runs the original per-question code in
+`utils/` over every question and asserts the two agree, so the fast path can't silently
+drift from the reference implementation.
+
+To start from a fresh CDC download instead:
+
+```bash
+python -m pipeline.build --from-csv path/to/BRFSS_prevalence.csv --verify
+```
+
+The [CDC prevalence CSV](https://data.cdc.gov/api/views/dttw-5yxu/rows.csv?accessType=DOWNLOAD)
+is about 1 GB; `--from-csv` converts it to the raw parquet first. Raw CSVs are git-ignored.
+
+## Deploying
+
+The dashboard runs on Vercel as a single Python serverless function.
+
+```bash
+vercel deploy
+```
+
+`api/index.py` exposes the Dash app's underlying Flask server, which is the WSGI callable
+Vercel's Python runtime looks for, and `vercel.json` rewrites every path to it. The
+pre-aggregation is what makes this viable: with only `dash` and `plotly` in
+`requirements.txt` the bundle stays far inside Vercel's 250 MB function limit, and a cold
+start loads a sub-megabyte JSON file instead of a 1 GB survey file.
+
+`.vercelignore` keeps the parquet files, the pipeline and the coursework out of the
+deployment.
 
 ## Structure
 
 | Path | What it does |
 |---|---|
 | `app.py` | Layout, the question cascade, and one callback per panel |
-| `utils/options.py` | Class, topic and question choices |
-| `utils/prepare.py` | Filters to one question and applies the merges |
+| `api/index.py` | Vercel entry point — exposes the Flask server |
+| `vercel.json` | Function config and catch-all rewrite |
+| `pipeline/build.py` | Normalises the survey file and pre-computes every panel |
+| `data/brfss_raw.parquet` | The CDC file as parquet, 21 MB (committed) |
+| `data/panels.json` | Pre-aggregated results the app actually reads, 0.68 MB |
 | `utils/merges.py` | Harmonises response and breakout IDs across years |
-| `utils/aggregation.py` | Pooled prevalence and confidence intervals per panel |
+| `utils/prepare.py` · `utils/options.py` · `utils/aggregation.py` | The original per-question implementation, now the reference `--verify` checks the pipeline against |
 | `assets/style.css` | Dashboard styling |
 | `BRFSS_Dashboard_Workflow_Notebook.ipynb` | Design rationale and workflow |
 | `BRFSS_Dashboard_Slides.pptx` | Presentation |
 
 ## Stack
 
-Python · pandas · NumPy · Plotly Dash
+Python · Plotly Dash (runtime) · pandas · NumPy · PyArrow (build) · Vercel
