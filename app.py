@@ -25,6 +25,11 @@ with PANELS_PATH.open(encoding="utf-8") as fh:
 PANELS = BUNDLE["panels"]
 CLASSES = BUNDLE["index"]["classes"]
 
+# Locationabbr -> full name, straight from the CDC file. The map is keyed on
+# the two-letter code because that is what Plotly's USA-states mode needs, so
+# this is what lets the hover say "Kentucky" rather than "KY".
+STATE_NAMES = BUNDLE.get("states", {})
+
 QUESTION_TEXT = {
     q["id"]: q["text"]
     for topics in CLASSES.values()
@@ -256,10 +261,15 @@ def build_map(rows, height):
         marker_line_color=SURFACE, marker_line_width=1,
         colorbar=dict(thickness=10, len=0.7, outlinewidth=0, ticksuffix="%",
                       tickfont=dict(family=FONT, size=11, color=MUTED)),
-        customdata=[(r[CI_LOW], r[CI_HIGH]) for r in rows],
+        # Fall back to the code itself if a location is ever unnamed, so the
+        # hover degrades to today's behaviour rather than showing nothing.
+        customdata=[
+            (STATE_NAMES.get(r[GROUP], r[GROUP]), r[CI_LOW], r[CI_HIGH])
+            for r in rows
+        ],
         hovertemplate=(
-            "<b>%{location}</b><br>%{z:.2f}%<br>"
-            "95% CI %{customdata[0]:.2f} – %{customdata[1]:.2f}<extra></extra>"
+            "<b>%{customdata[0]}</b> (%{location})<br>%{z:.2f}%<br>"
+            "95% CI %{customdata[1]:.2f} – %{customdata[2]:.2f}<extra></extra>"
         ),
     ))
     fig.update_layout(
@@ -367,9 +377,14 @@ app.layout = html.Div(className="page", children=[
             for panel, label in BREAKDOWNS
         ]),
 
+        # The map's graph is mounted by its callback rather than sitting here
+        # empty. Plotly fits a geo projection once, at mount, and a graph that
+        # mounts inside the hidden results container fits to a zero-size box —
+        # it then keeps that scale and renders the map a few pixels wide, since
+        # geo (unlike the cartesian panels) does not refit on resize.
         card([
             html.P(id="map-label", className="card-label"),
-            dcc.Graph(id="state-plot", config=GRAPH_CONFIG),
+            html.Div(id="state-graph"),
         ]),
     ]),
 
@@ -516,13 +531,8 @@ def update_temporal(question_id, response):
     return build_sparkline(rows, height=150)
 
 
-@app.callback(
-    Output("state-plot", "figure"),
-    Output("map-label", "children"),
-    Input("question-dd", "value"),
-    Input("response-rd", "value"),
-)
-def update_state(question_id, response):
+def state_figure(question_id, response):
+    """The map figure and its card label, split out so tests can read it."""
     rows = panel_rows(question_id, "state", response)
     if not rows:
         return empty_figure("No state-level data for this question"), "By state"
@@ -530,6 +540,17 @@ def update_state(question_id, response):
     # same quantity — unlike a "highest response per state" rule, which can
     # silently colour different states by different responses.
     return build_map(rows, height=420), f"By state · {len(rows)} reporting"
+
+
+@app.callback(
+    Output("state-graph", "children"),
+    Output("map-label", "children"),
+    Input("question-dd", "value"),
+    Input("response-rd", "value"),
+)
+def update_state(question_id, response):
+    figure, label = state_figure(question_id, response)
+    return dcc.Graph(id="state-plot", figure=figure, config=GRAPH_CONFIG), label
 
 
 if __name__ == "__main__":

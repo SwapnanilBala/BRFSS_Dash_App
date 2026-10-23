@@ -46,6 +46,7 @@ PANELS_JSON = DATA / "panels.json"
 COLUMNS = [
     "Year",
     "Locationabbr",
+    "Locationdesc",
     "Class",
     "Topic",
     "Question",
@@ -216,13 +217,31 @@ def aggregate(df: pd.DataFrame) -> tuple[dict, dict]:
     return panels, index
 
 
-def write_json(panels: dict, index: dict, source_rows: int) -> None:
+def state_names(df: pd.DataFrame) -> dict[str, str]:
+    """Locationabbr -> Locationdesc, so the map can label a state in words.
+
+    The CDC file already pairs each code with its full name, including the
+    territories, so there is nothing to hardcode here.
+    """
+    pairs = df[["Locationabbr", "Locationdesc"]].dropna().drop_duplicates()
+    names = dict(zip(pairs["Locationabbr"], pairs["Locationdesc"]))
+
+    ambiguous = len(pairs) - len(names)
+    if ambiguous:
+        print(f"[states] warning: {ambiguous} codes map to more than one name")
+
+    print(f"[states] {len(names)} location codes named")
+    return dict(sorted(names.items()))
+
+
+def write_json(panels: dict, index: dict, states: dict, source_rows: int) -> None:
     payload = {
         "generated": date.today().isoformat(),
         "source_rows": source_rows,
         # [group, response, percent, ci_low, ci_high]; group is "" for overall
         "columns": ["group", "response", "percent", "ci_low", "ci_high"],
         "index": index,
+        "states": states,
         "panels": panels,
     }
     PANELS_JSON.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
@@ -339,7 +358,7 @@ def main() -> int:
         df = normalize()
 
     panels, index = aggregate(df)
-    write_json(panels, index, source_rows=len(df))
+    write_json(panels, index, state_names(df), source_rows=len(df))
 
     if args.verify and not verify(df, panels, sample=args.verify_sample):
         return 1
