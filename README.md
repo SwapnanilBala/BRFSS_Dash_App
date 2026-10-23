@@ -4,6 +4,8 @@ An interactive Plotly Dash app for exploring the CDC's **Behavioral Risk Factor 
 (BRFSS) prevalence data. Pick any survey question, then see how responses break down by gender, age,
 race, education, income, year and state, with confidence intervals on every estimate.
 
+**Live: [brfssdashanalysis.vercel.app](https://brfssdashanalysis.vercel.app/)**
+
 <p align="center"><img src="docs/dashboard-age.png" alt="Dashboard showing 'Ever told you that you have a form of depression?' broken down by age group, with confidence-interval whiskers on each bar" width="100%"></p>
 <p align="center"><sub>"Ever told you that you have a form of depression?" by age group, from the full 2011–present CDC file.</sub></p>
 
@@ -66,7 +68,9 @@ is about 1 GB; `--from-csv` converts it to the raw parquet first. Raw CSVs are g
 
 ## Deploying
 
-The dashboard runs on Vercel as a single Python serverless function.
+The dashboard runs on Vercel as a single Python serverless function, deployed from
+`main` at [brfssdashanalysis.vercel.app](https://brfssdashanalysis.vercel.app/).
+Pushing to `main` redeploys it.
 
 ```bash
 vercel deploy
