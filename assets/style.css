@@ -160,7 +160,13 @@ body {
 .grid { display: grid; gap: var(--gap); margin-bottom: var(--gap); }
 
 .grid-lead { grid-template-columns: 1fr 2fr; }
-.grid-breakdowns { grid-template-columns: repeat(3, 1fr); }
+
+/* Panels are sized to their group count, so let each card hug its chart;
+   stretching leaves a two-row panel padded out to a six-row neighbour. */
+.grid-breakdowns {
+  grid-template-columns: repeat(3, 1fr);
+  align-items: start;
+}
 
 .card-hero { display: flex; flex-direction: column; justify-content: center; }
 
