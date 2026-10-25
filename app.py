@@ -30,6 +30,17 @@ CLASSES = BUNDLE["index"]["classes"]
 # this is what lets the hover say "Kentucky" rather than "KY".
 STATE_NAMES = BUNDLE.get("states", {})
 
+# The survey years actually in the data, e.g. "2011–2023". Read from the
+# temporal panels rather than hard-coded, so the header stays right when the
+# CDC publishes a new year and the panels are rebuilt.
+_YEARS = sorted({
+    int(row[0])
+    for panel in PANELS.values()
+    for row in panel.get("temporal", [])
+    if str(row[0]).isdigit()
+})
+YEAR_SPAN = f"{_YEARS[0]}–{_YEARS[-1]}" if _YEARS else ""
+
 QUESTION_TEXT = {
     q["id"]: q["text"]
     for topics in CLASSES.values()
@@ -306,7 +317,7 @@ app.layout = html.Div(className="page", children=[
     html.Header(className="header", children=[
         html.H1("BRFSS Interactive Dashboard", className="title"),
         html.P(
-            "CDC Behavioral Risk Factor Surveillance System, 2011–present. "
+            f"CDC Behavioral Risk Factor Surveillance System, {YEAR_SPAN}. "
             "Every estimate is pooled across states and carries a 95% confidence interval.",
             className="subtitle",
         ),
@@ -364,7 +375,7 @@ app.layout = html.Div(className="page", children=[
                 html.P(id="hero-note", className="card-note"),
             ], className="card card-hero"),
             card([
-                html.P("Trend, 2011–present", className="card-label"),
+                html.P(f"Trend, {YEAR_SPAN}", className="card-label"),
                 dcc.Graph(id="temporal-plot", config=GRAPH_CONFIG),
             ], className="card card-trend"),
         ]),
