@@ -1,13 +1,13 @@
-# BRFSS Interactive Dashboard (2011–present)
+# BRFSS Interactive Dashboard (2011–2023)
 
 An interactive Plotly Dash app for exploring the CDC's **Behavioral Risk Factor Surveillance System**
-(BRFSS) prevalence data. Pick any survey question, then see how responses break down by gender, age,
+(BRFSS) prevalence data, survey years 2011–2023. Pick any survey question, then see how responses break down by gender, age,
 race, education, income, year and state, with confidence intervals on every estimate.
 
 **Live: [brfssdashanalysis.vercel.app](https://brfssdashanalysis.vercel.app/)**
 
-<p align="center"><img src="docs/dashboard.png" alt="Dashboard showing 'Ever told you that you have a form of depression?' — an overall figure of 17.0% with its confidence interval, a trend sparkline, and dot-and-interval breakdowns by gender and age group" width="100%"></p>
-<p align="center"><sub>Every breakdown for one question on a single screen, from the full 2011–present CDC file.</sub></p>
+<p align="center"><img src="docs/dashboard.png" alt="Dashboard showing 'Ever told you that you have a form of depression?' — an overall figure of 17.0% with its confidence interval, a 2011–2023 trend, and dot-and-interval breakdowns by gender, age group and race" width="100%"></p>
+<p align="center"><sub>Every breakdown for one question on a single screen, from the full 2011–2023 CDC file.</sub></p>
 
 ## What it does
 
@@ -47,7 +47,8 @@ pandas, numpy or pyarrow at all.
 ### Rebuilding the data
 
 `data/panels.json` is generated. You only need to regenerate it if you change the
-statistics or the CDC publishes a new year.
+statistics or the CDC publishes a new year. The dashboard reads its year range from the data, but
+the range in this README's title and intro is written by hand, so update it too.
 
 ```bash
 python -m pip install -r requirements-dev.txt
@@ -100,8 +101,8 @@ deployment.
 | `data/panels.json` | Pre-aggregated results the app actually reads, 0.68 MB |
 | `utils/merges.py` | Harmonises response and breakout IDs across years |
 | `utils/prepare.py` · `utils/options.py` · `utils/aggregation.py` | The original per-question implementation, now the reference `--verify` checks the pipeline against |
-| `BRFSS_Dashboard_Workflow_Notebook.ipynb` | Design rationale and workflow |
-| `BRFSS_Dashboard_Slides.pptx` | Presentation |
+| `BRFSS_Dashboard_Workflow_Notebook.ipynb` | Original design rationale and workflow (Dec 2025) |
+| `BRFSS_Dashboard_Report.pdf` · `BRFSS_Dashboard_Slides.pptx` | Original report and slides (Dec 2025). They describe the first, tabbed version of the app, from before the one-screen rebuild and the pre-aggregated pipeline |
 
 ## Stack
 
