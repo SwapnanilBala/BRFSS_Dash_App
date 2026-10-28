@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from dash import Dash, dcc, html, Input, Output
+from dash import Dash, dcc, html, Input, Output, State
 import plotly.graph_objects as go
 
 # =========================================================
@@ -75,36 +75,86 @@ FILTER_OPTIONS = [
     {"label": "Bottom 3", "value": "less"},
 ]
 
+THEME_OPTIONS = [
+    {"label": "System", "value": "system"},
+    {"label": "Light", "value": "light"},
+    {"label": "Dark", "value": "dark"},
+]
+
 # =========================================================
 # PALETTE
 # =========================================================
 # One hue plus ink. These panels compare magnitude within a single response, so
 # the colour job is sequential, not categorical — a colour per break-out group
 # would imply a distinction that isn't in the data.
-BLUE = "#2a78d6"
-BLUE_FILL = "rgba(42,120,214,0.10)"
-INK = "#0b0b0b"
-MUTED = "#52514e"
-GRID = "#e6e5e1"
-SURFACE = "#ffffff"
-LAND = "#f0efec"
-SEQUENTIAL = [[0.0, "#cde2fb"], [0.5, "#3987e5"], [1.0, "#104281"]]
+#
+# Plotly takes its colours from here, not from the stylesheet, so a CSS theme
+# can't reach the figures: every builder takes the resolved theme and the
+# figure callbacks re-run when it changes. Dark is a selected palette rather
+# than an inversion — the blue steps up to the dark-surface slot, gridlines
+# drop to a hairline, and the map's ramp flips its anchor so low values recede
+# toward the dark surface the way they recede toward white in light mode.
+THEMES = {
+    "light": dict(
+        blue="#2a78d6",
+        blue_fill="rgba(42,120,214,0.10)",
+        interval_opacity=0.30,
+        ink="#0b0b0b",
+        muted="#52514e",
+        grid="#e1e0d9",
+        surface="#ffffff",
+        land="#f0efec",
+        # Plotly stretches the scale over the data's own range, so the low end
+        # is the lowest reporting state, not zero — it has to stay visibly
+        # coloured against the grey of states with no data. Step 250 is the
+        # lightest that clears 2:1 on white.
+        sequential=[[0.0, "#86b6ef"], [0.5, "#3987e5"], [1.0, "#104281"]],
+        hover_bg="#ffffff",
+        hover_line="#d6d5ce",
+    ),
+    "dark": dict(
+        blue="#3987e5",
+        blue_fill="rgba(57,135,229,0.16)",
+        interval_opacity=0.42,
+        ink="#f0efec",
+        muted="#c3c2b7",
+        grid="#2c2c2a",
+        surface="#1a1a19",
+        land="#383835",
+        # Step 600 is the darkest a ramp may start on this surface and still
+        # clear 2:1, so the lowest state never sinks into the background.
+        sequential=[[0.0, "#184f95"], [0.5, "#3987e5"], [1.0, "#b7d3f6"]],
+        hover_bg="#262624",
+        hover_line="#383835",
+    ),
+}
 
 FONT = "Inter, system-ui, -apple-system, sans-serif"
-
-BASE_LAYOUT = dict(
-    paper_bgcolor=SURFACE,
-    plot_bgcolor=SURFACE,
-    font=dict(family=FONT, size=13, color=INK),
-    margin=dict(l=8, r=8, t=10, b=8),
-    showlegend=False,
-    hoverlabel=dict(font=dict(family=FONT, size=12)),
-)
 
 # Not "responsive": that makes dcc.Graph fill its container and ignore the
 # figure's own height, which collapses these panels to a couple of pixels.
 # Plotly's default autosize already tracks the container width.
 GRAPH_CONFIG = {"displayModeBar": False}
+
+
+def palette(theme):
+    """The colours for a resolved theme; anything unresolved falls back to light."""
+    return THEMES.get(theme, THEMES["light"])
+
+
+def base_layout(p):
+    return dict(
+        paper_bgcolor=p["surface"],
+        plot_bgcolor=p["surface"],
+        font=dict(family=FONT, size=13, color=p["ink"]),
+        margin=dict(l=8, r=8, t=10, b=8),
+        showlegend=False,
+        hoverlabel=dict(
+            bgcolor=p["hover_bg"],
+            bordercolor=p["hover_line"],
+            font=dict(family=FONT, size=12, color=p["ink"]),
+        ),
+    )
 
 
 # =========================================================
@@ -168,22 +218,24 @@ def axis_window(rows, pad=0.5):
 # FIGURE BUILDERS
 # =========================================================
 
-def empty_figure(message):
+def empty_figure(message, theme=None):
+    p = palette(theme)
     fig = go.Figure()
     fig.add_annotation(
         text=message, showarrow=False,
-        font=dict(family=FONT, size=13, color=MUTED),
+        font=dict(family=FONT, size=13, color=p["muted"]),
         xref="paper", yref="paper", x=0.5, y=0.5,
     )
     fig.update_layout(
-        **BASE_LAYOUT,
+        **base_layout(p),
         xaxis=dict(visible=False), yaxis=dict(visible=False),
     )
     return fig
 
 
-def build_dot_interval(rows, height):
+def build_dot_interval(rows, height, theme=None):
     """A dot per group with its confidence interval drawn as a bar through it."""
+    p = palette(theme)
     rows = sorted(rows, key=lambda r: r[PERCENT])
     labels = [r[GROUP] for r in rows]
     values = [r[PERCENT] for r in rows]
@@ -194,16 +246,16 @@ def build_dot_interval(rows, height):
     for row in rows:
         fig.add_trace(go.Scatter(
             x=[row[CI_LOW], row[CI_HIGH]], y=[row[GROUP], row[GROUP]],
-            mode="lines", line=dict(color=BLUE, width=3),
-            opacity=0.30, hoverinfo="skip",
+            mode="lines", line=dict(color=p["blue"], width=3),
+            opacity=p["interval_opacity"], hoverinfo="skip",
         ))
 
     fig.add_trace(go.Scatter(
         x=values, y=labels, mode="markers+text",
-        marker=dict(size=11, color=BLUE, line=dict(width=2, color=SURFACE)),
+        marker=dict(size=11, color=p["blue"], line=dict(width=2, color=p["surface"])),
         text=[f"{v:.1f}%" for v in values],
         textposition="middle right",
-        textfont=dict(family=FONT, size=12, color=INK),
+        textfont=dict(family=FONT, size=12, color=p["ink"]),
         customdata=[(r[CI_LOW], r[CI_HIGH]) for r in rows],
         hovertemplate=(
             "<b>%{y}</b><br>%{x:.2f}%<br>"
@@ -214,27 +266,29 @@ def build_dot_interval(rows, height):
     fig.update_layout(
         # Bottom margin leaves room for the tick labels; without it the value
         # labels on a two-row panel sit on top of the axis.
-        **{**BASE_LAYOUT, "margin": dict(l=8, r=8, t=6, b=26)}, height=height,
+        **{**base_layout(p), "margin": dict(l=8, r=8, t=6, b=26)}, height=height,
         xaxis=dict(
-            range=axis_window(rows), showgrid=True, gridcolor=GRID,
+            range=axis_window(rows), showgrid=True, gridcolor=p["grid"],
             zeroline=False, ticksuffix="%",
-            tickfont=dict(family=FONT, size=11, color=MUTED),
+            tickfont=dict(family=FONT, size=11, color=p["muted"]),
         ),
         yaxis=dict(
             showgrid=False, zeroline=False,
-            tickfont=dict(family=FONT, size=12, color=INK),
+            tickfont=dict(family=FONT, size=12, color=p["ink"]),
         ),
     )
     return fig
 
 
-def build_sparkline(rows, height):
+def build_sparkline(rows, height, theme=None):
+    p = palette(theme)
     rows = sorted(rows, key=lambda r: int(r[GROUP]))
     fig = go.Figure(go.Scatter(
         x=[int(r[GROUP]) for r in rows],
         y=[r[PERCENT] for r in rows],
-        mode="lines", line=dict(color=BLUE, width=2.5, shape="spline", smoothing=0.5),
-        fill="tozeroy", fillcolor=BLUE_FILL,
+        mode="lines",
+        line=dict(color=p["blue"], width=2.5, shape="spline", smoothing=0.5),
+        fill="tozeroy", fillcolor=p["blue_fill"],
         customdata=[(r[CI_LOW], r[CI_HIGH]) for r in rows],
         hovertemplate=(
             "<b>%{x}</b><br>%{y:.2f}%<br>"
@@ -243,24 +297,25 @@ def build_sparkline(rows, height):
     ))
     values = [r[PERCENT] for r in rows]
     fig.update_layout(
-        **{**BASE_LAYOUT, "margin": dict(l=8, r=8, t=6, b=22)}, height=height,
+        **{**base_layout(p), "margin": dict(l=8, r=8, t=6, b=22)}, height=height,
         hovermode="x unified",
         xaxis=dict(showgrid=False, zeroline=False, dtick=2,
-                   tickfont=dict(family=FONT, size=11, color=MUTED)),
+                   tickfont=dict(family=FONT, size=11, color=p["muted"])),
         yaxis=dict(visible=False, range=[0, max(values) * 1.25]),
     )
     return fig
 
 
-def build_map(rows, height):
+def build_map(rows, height, theme=None):
+    p = palette(theme)
     fig = go.Figure(go.Choropleth(
         locations=[r[GROUP] for r in rows],
         z=[r[PERCENT] for r in rows],
         locationmode="USA-states",
-        colorscale=SEQUENTIAL,
-        marker_line_color=SURFACE, marker_line_width=1,
+        colorscale=p["sequential"],
+        marker_line_color=p["surface"], marker_line_width=1,
         colorbar=dict(thickness=10, len=0.7, outlinewidth=0, ticksuffix="%",
-                      tickfont=dict(family=FONT, size=11, color=MUTED)),
+                      tickfont=dict(family=FONT, size=11, color=p["muted"])),
         # Fall back to the code itself if a location is ever unnamed, so the
         # hover degrades to today's behaviour rather than showing nothing.
         customdata=[
@@ -273,11 +328,11 @@ def build_map(rows, height):
         ),
     ))
     fig.update_layout(
-        **{**BASE_LAYOUT, "margin": dict(l=0, r=0, t=0, b=0)}, height=height,
+        **{**base_layout(p), "margin": dict(l=0, r=0, t=0, b=0)}, height=height,
         # Plotly fits the usa scope at about a third of the available area by
         # default, which leaves the map floating in the card; scale 1 fills it.
-        geo=dict(scope="usa", bgcolor=SURFACE, lakecolor=SURFACE,
-                 landcolor=LAND, subunitcolor=SURFACE,
+        geo=dict(scope="usa", bgcolor=p["surface"], lakecolor=p["surface"],
+                 landcolor=p["land"], subunitcolor=p["surface"],
                  projection=dict(scale=1.0)),
     )
     return fig
@@ -288,6 +343,23 @@ def build_map(rows, height):
 # =========================================================
 app = Dash(__name__, title="BRFSS Interactive Dashboard")
 server = app.server  # WSGI entry point for Vercel / gunicorn
+
+# Resolve the theme in <head>, before anything paints. Without this, a visitor
+# who chose dark would see the light page until Dash booted and ran the
+# clientside callback below. The stylesheet keys off this attribute, and since
+# a Dash page can't render without JavaScript there is no no-script case to
+# cover with a media query.
+THEME_BOOT = """<script>
+        (function () {
+            var choice = "system";
+            try { choice = localStorage.getItem("brfss-theme") || "system"; } catch (e) {}
+            var dark = choice === "dark" || (choice !== "light" && window.matchMedia &&
+                window.matchMedia("(prefers-color-scheme: dark)").matches);
+            document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+        })();
+        </script>
+        """
+app.index_string = app.index_string.replace("{%css%}", THEME_BOOT + "{%css%}")
 
 
 def selector(label, component):
@@ -303,13 +375,28 @@ def card(children, className="card"):
 
 app.layout = html.Div(className="page", children=[
 
+    # The resolved theme ("light" or "dark") that the figure callbacks read,
+    # and a ping that assets/theme.js sets when the OS setting flips.
+    dcc.Store(id="theme-store"),
+    dcc.Store(id="os-theme"),
+
     html.Header(className="header", children=[
-        html.H1("BRFSS Interactive Dashboard", className="title"),
-        html.P(
-            "CDC Behavioral Risk Factor Surveillance System, 2011–present. "
-            "Every estimate is pooled across states and carries a 95% confidence interval.",
-            className="subtitle",
-        ),
+        html.Div(className="header-text", children=[
+            html.H1("BRFSS Interactive Dashboard", className="title"),
+            html.P(
+                "CDC Behavioral Risk Factor Surveillance System, 2011–present. "
+                "Every estimate is pooled across states and carries a 95% confidence interval.",
+                className="subtitle",
+            ),
+        ]),
+        html.Div(className="control-group theme-switch", children=[
+            html.Span("Theme", className="control-label"),
+            dcc.RadioItems(
+                id="theme-rd", className="chips chips-small",
+                options=THEME_OPTIONS, value="system", inline=True,
+                persistence=True, persistence_type="local",
+            ),
+        ]),
     ]),
 
     # -------------------- QUESTION CASCADE --------------------
@@ -396,6 +483,33 @@ app.layout = html.Div(className="page", children=[
         ]),
     ]),
 ])
+
+
+# =========================================================
+# THEME
+# =========================================================
+# Runs in the browser: it needs matchMedia and localStorage, and a server round
+# trip would only add latency to every toggle. It resolves "system" against the
+# OS, keeps the <html> attribute and the stored choice in step, and only
+# publishes a new theme when the resolved value actually changes, so an OS flip
+# under an explicit choice doesn't redraw every figure for nothing.
+app.clientside_callback(
+    """
+    function (choice, osTheme, current) {
+        var prefersDark = window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches;
+        var resolved = (choice === "light" || choice === "dark")
+            ? choice : (prefersDark ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", resolved);
+        try { localStorage.setItem("brfss-theme", choice || "system"); } catch (e) {}
+        return resolved === current ? window.dash_clientside.no_update : resolved;
+    }
+    """,
+    Output("theme-store", "data"),
+    Input("theme-rd", "value"),
+    Input("os-theme", "data"),
+    State("theme-store", "data"),
+)
 
 
 # =========================================================
@@ -495,6 +609,8 @@ def update_hero(question_id, response):
 # PANEL CALLBACKS
 # =========================================================
 # Registered from BREAKDOWNS so the five small multiples cannot drift apart.
+# The theme defaults to None (light) only so tests can call these directly;
+# Dash always passes it.
 
 def register_breakdown(panel, label):
     @app.callback(
@@ -502,15 +618,18 @@ def register_breakdown(panel, label):
         Input("question-dd", "value"),
         Input("response-rd", "value"),
         Input("mode-rd", "value"),
+        Input("theme-store", "data"),
     )
-    def update_breakdown(question_id, response, mode, panel=panel, label=label):
+    def update_breakdown(question_id, response, mode, theme=None,
+                         panel=panel, label=label):
         rows = apply_filter(panel_rows(question_id, panel, response), mode)
         if not rows:
-            return empty_figure(f"No {label.lower()} breakdown for this question")
+            return empty_figure(f"No {label.lower()} breakdown for this question", theme)
         # Roughly one row of height per group, so a two-group panel is not
         # stretched to the height of a six-group one. The floor keeps the two
         # -row panels tall enough that the value labels clear the axis.
-        return build_dot_interval(rows, height=max(158, 34 * len(rows) + 62))
+        return build_dot_interval(rows, height=max(158, 34 * len(rows) + 62),
+                                  theme=theme)
 
     return update_breakdown
 
@@ -523,23 +642,24 @@ for _panel, _label in BREAKDOWNS:
     Output("temporal-plot", "figure"),
     Input("question-dd", "value"),
     Input("response-rd", "value"),
+    Input("theme-store", "data"),
 )
-def update_temporal(question_id, response):
+def update_temporal(question_id, response, theme=None):
     rows = panel_rows(question_id, "temporal", response)
     if not rows:
-        return empty_figure("No year-by-year data for this question")
-    return build_sparkline(rows, height=150)
+        return empty_figure("No year-by-year data for this question", theme)
+    return build_sparkline(rows, height=150, theme=theme)
 
 
-def state_figure(question_id, response):
+def state_figure(question_id, response, theme=None):
     """The map figure and its card label, split out so tests can read it."""
     rows = panel_rows(question_id, "state", response)
     if not rows:
-        return empty_figure("No state-level data for this question"), "By state"
+        return empty_figure("No state-level data for this question", theme), "By state"
     # Only the selected response is mapped, so every state is shaded on the
     # same quantity — unlike a "highest response per state" rule, which can
     # silently colour different states by different responses.
-    return build_map(rows, height=420), f"By state · {len(rows)} reporting"
+    return build_map(rows, height=420, theme=theme), f"By state · {len(rows)} reporting"
 
 
 @app.callback(
@@ -547,9 +667,10 @@ def state_figure(question_id, response):
     Output("map-label", "children"),
     Input("question-dd", "value"),
     Input("response-rd", "value"),
+    Input("theme-store", "data"),
 )
-def update_state(question_id, response):
-    figure, label = state_figure(question_id, response)
+def update_state(question_id, response, theme):
+    figure, label = state_figure(question_id, response, theme)
     return dcc.Graph(id="state-plot", figure=figure, config=GRAPH_CONFIG), label
 
 

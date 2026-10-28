@@ -1,11 +1,18 @@
-/* BRFSS dashboard — one-screen layout.
-   Charts are rendered server-side by Plotly with light-mode colours, so the
-   page is pinned to light rather than half-supporting a dark theme the figures
-   would not follow. */
+/* BRFSS dashboard — one-screen layout, light and dark.
+
+   The theme is the data-theme attribute on <html>, set in <head> before first
+   paint and kept current by a clientside callback (both in app.py). Plotly
+   figures can't read these tokens, so app.py carries a matching palette per
+   theme; --panel here and "surface" there must stay the same colour, because
+   every chart paints its own background onto a card.
+
+   The selectors are html:root rather than :root so they outrank the --Dash-*
+   defaults Dash 4 declares on :root for its own components, whatever order
+   the stylesheets load in. */
 
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650&display=swap");
 
-:root {
+html:root {
   color-scheme: light;
 
   --surface: #fcfcfb;
@@ -13,12 +20,52 @@
   --ink: #0b0b0b;
   --muted: #52514e;
   --line: #e6e5e1;
+  --line-strong: #cfcec9;
   --blue: #2a78d6;
   --blue-dark: #1c5cab;
   --blue-wash: #eef4fd;
+  --chip-on: #2a78d6;
 
   --radius: 11px;
   --gap: 14px;
+
+  /* Dash 4's dropdowns default to a purple accent; keep them on the blue. */
+  --Dash-Fill-Interactive-Strong: var(--blue);
+  --Dash-Fill-Interactive-Weak: rgba(42, 120, 214, 0.06);
+}
+
+/* Dark is its own set of steps, not an inversion: the page drops to the dark
+   plane, cards to the dark chart surface, and the blue moves to the slot that
+   holds its contrast there. */
+html:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface: #0d0d0d;
+  --panel: #1a1a19;
+  --ink: #f0efec;
+  --muted: #c3c2b7;
+  --line: rgba(255, 255, 255, 0.10);
+  --line-strong: rgba(255, 255, 255, 0.24);
+  --blue: #3987e5;
+  --blue-dark: #86b6ef;
+  --blue-wash: rgba(57, 135, 229, 0.12);
+  /* The selected chip keeps the deeper blue: white text on #3987e5 is under
+     4.5:1, on #2a78d6 it clears it. */
+  --chip-on: #2a78d6;
+
+  --Dash-Fill-Inverse-Strong: var(--panel);
+  --Dash-Fill-Interactive-Weak: rgba(57, 135, 229, 0.14);
+  --Dash-Fill-Primary-Hover: rgba(255, 255, 255, 0.05);
+  --Dash-Fill-Primary-Active: rgba(255, 255, 255, 0.09);
+  --Dash-Fill-Disabled: rgba(255, 255, 255, 0.06);
+  --Dash-Text-Primary: var(--ink);
+  --Dash-Text-Strong: var(--ink);
+  --Dash-Text-Weak: var(--muted);
+  --Dash-Text-Disabled: rgba(240, 239, 236, 0.45);
+  --Dash-Stroke-Weak: rgba(255, 255, 255, 0.12);
+  --Dash-Stroke-Strong: rgba(255, 255, 255, 0.32);
+  --Dash-Shading-Weak: rgba(0, 0, 0, 0.35);
+  --Dash-Shading-Strong: rgba(0, 0, 0, 0.55);
 }
 
 * { box-sizing: border-box; }
@@ -39,7 +86,17 @@ body {
 
 /* -------------------- header -------------------- */
 
-.header { margin-bottom: 22px; }
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.header-text { min-width: 0; }
+
+.theme-switch { flex-shrink: 0; padding-top: 3px; }
 
 .title {
   font-size: 21px;
@@ -105,17 +162,6 @@ body {
   margin-bottom: 5px;
 }
 
-/* Dash renders react-select; these keep it in the same visual language. */
-.Select-control,
-.is-focused:not(.is-open) > .Select-control {
-  border: 1px solid var(--line) !important;
-  border-radius: 9px !important;
-  background: var(--panel) !important;
-  box-shadow: none !important;
-}
-
-.VirtualizedSelectFocusedOption { background: var(--blue-wash) !important; }
-
 /* -------------------- chips -------------------- */
 
 .controls {
@@ -151,16 +197,25 @@ body {
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 
-.chips label:hover { border-color: #cfcec9; }
+.chips label:hover { border-color: var(--line-strong); }
 
 .chips input { position: absolute; opacity: 0; pointer-events: none; }
 
-.chips label:has(input:checked) {
-  background: var(--blue);
-  border-color: var(--blue);
+/* Dash 4 tints an option's text with its accent on :hover and :focus-within,
+   at a specificity that beats a plain :checked rule. A chip you have just
+   clicked keeps focus, so without the extra states here its label would turn
+   accent-on-accent and vanish. */
+.chips .dash-options-list-option:has(input:checked),
+.chips .dash-options-list-option:has(input:checked):hover,
+.chips .dash-options-list-option:has(input:checked):focus-within {
+  background: var(--chip-on);
+  border-color: var(--chip-on);
   color: #fff;
   font-weight: 500;
 }
+
+.chips-small { gap: 4px; }
+.chips-small label { padding: 3px 10px; font-size: 12px; }
 
 .chips label:has(input:focus-visible) {
   outline: 2px solid var(--blue-dark);
@@ -258,6 +313,8 @@ body {
 
 @media (max-width: 760px) {
   .page { padding: 20px 16px 40px; }
+  .header { flex-direction: column; gap: 12px; }
+  .theme-switch { padding-top: 0; }
   .grid-lead,
   .grid-breakdowns { grid-template-columns: 1fr; }
   .selector { flex: 1 1 100%; }

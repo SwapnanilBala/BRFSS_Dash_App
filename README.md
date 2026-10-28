@@ -17,6 +17,7 @@ race, education, income, year and state, with confidence intervals on every esti
 - **Visible confidence intervals:** each estimate is a dot with its 95% interval drawn through it, on an axis framed to the data. Three quarters of the intervals in this dataset are under one percentage point wide, so a 0–100 axis hides them entirely.
 - **Sorted, labelled groups:** every group carries its value, ordered by size, so the ranking is readable without counting gridlines.
 - **Top / bottom 3:** narrow any breakdown to its three highest or lowest groups.
+- **Light and dark themes:** follows the operating system by default, live, and remembers an explicit Light or Dark choice. Dark is its own validated palette rather than an inversion: the series blue steps up to the slot that holds contrast on a dark surface, and the map's colour ramp flips so low values recede into the background the same way they do in light mode.
 
 ## How the numbers are computed
 
@@ -91,8 +92,9 @@ deployment.
 
 | Path | What it does |
 |---|---|
-| `app.py` | Layout, the question cascade, and one callback per panel |
-| `assets/style.css` | Design tokens, card grid and responsive breakpoints |
+| `app.py` | Layout, the question cascade, one callback per panel, and the per-theme chart palette |
+| `assets/style.css` | Light and dark design tokens, card grid and responsive breakpoints |
+| `assets/theme.js` | Tells Dash when the OS switches light/dark, so the System setting tracks it live |
 | `api/index.py` | Vercel entry point — exposes the Flask server |
 | `vercel.json` | Function config and catch-all rewrite |
 | `pipeline/build.py` | Normalises the survey file and pre-computes every panel |
