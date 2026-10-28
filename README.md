@@ -6,8 +6,13 @@ race, education, income, year and state, with confidence intervals on every esti
 
 **Live: [brfssdashanalysis.vercel.app](https://brfssdashanalysis.vercel.app/)**
 
-<p align="center"><img src="docs/dashboard.png" alt="Dashboard showing 'Ever told you that you have a form of depression?' — an overall figure of 17.0% with its confidence interval, a trend sparkline, and dot-and-interval breakdowns by gender and age group" width="100%"></p>
-<p align="center"><sub>Every breakdown for one question on a single screen, from the full 2011–present CDC file.</sub></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/dashboard-dark.png">
+    <img src="docs/dashboard-light.png" width="100%" alt="Dashboard for 'Ever told you that you have a form of depression?': 17.0% overall with a 95% confidence interval of 16.9 to 17.1, a trend line from 2011, and gender and age breakdowns that print each group's value with its margin, such as 23.6% ±0.1 for women">
+  </picture>
+</p>
+<p align="center"><sub>One question on one screen: the overall figure, its trend, and every group's value with its 95% margin. GitHub shows the dark version if your theme is dark.</sub></p>
 
 ## What it does
 

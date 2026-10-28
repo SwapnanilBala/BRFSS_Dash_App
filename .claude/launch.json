@@ -6,6 +6,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["app.py"],
       "port": 8050
+    },
+    {
+      "name": "brfss-dash-clean",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-c", "from app import app; app.run(port=8051, debug=False)"],
+      "port": 8051
     }
   ]
 }
