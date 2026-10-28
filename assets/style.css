@@ -243,10 +243,15 @@ body {
 
 .grid-lead { grid-template-columns: 1fr 2fr; }
 
-/* Panels are sized to their group count, so let each card hug its chart;
+/* Two columns, never three. Each panel spends ~90px on its value column and
+   up to ~140px on group names, so in three columns the plot itself shrank to
+   under 100px. Across the dataset, two columns roughly doubles the share of
+   intervals drawn wider than their dot (about a quarter -> about a half).
+
+   Panels are sized to their group count, so let each card hug its chart;
    stretching leaves a two-row panel padded out to a six-row neighbour. */
 .grid-breakdowns {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   align-items: start;
 }
 
@@ -300,12 +305,6 @@ body {
 }
 
 /* -------------------- responsive -------------------- */
-
-/* Three columns need ~360px each before the group labels and the value
-   labels start colliding, so drop to two well before the tablet breakpoint. */
-@media (max-width: 1120px) {
-  .grid-breakdowns { grid-template-columns: repeat(2, 1fr); }
-}
 
 @media (max-width: 900px) {
   .grid-lead { grid-template-columns: 1fr; }

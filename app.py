@@ -98,7 +98,7 @@ THEMES = {
     "light": dict(
         blue="#2a78d6",
         blue_fill="rgba(42,120,214,0.10)",
-        interval_opacity=0.30,
+        interval_opacity=0.40,
         ink="#0b0b0b",
         muted="#52514e",
         grid="#e1e0d9",
@@ -115,7 +115,7 @@ THEMES = {
     "dark": dict(
         blue="#3987e5",
         blue_fill="rgba(57,135,229,0.16)",
-        interval_opacity=0.42,
+        interval_opacity=0.50,
         ink="#f0efec",
         muted="#c3c2b7",
         grid="#2c2c2a",
@@ -200,18 +200,32 @@ def apply_filter(rows, mode):
     return ordered[:3]
 
 
-def axis_window(rows, pad=0.5):
-    """Frame the axis on the data.
+def axis_window(rows, pad=0.12):
+    """Frame the axis on the data, with just enough room for the dots.
 
-    Three quarters of the confidence intervals in this dataset are under one
-    percentage point wide, so on a 0-100 axis they are smaller than a pixel.
-    Zooming to the data is what makes them legible.
+    The value labels live in their own column outside the plot, so the axis
+    no longer has to make room for them and every interval gets the width.
     """
     lows = [r[CI_LOW] for r in rows]
     highs = [r[CI_HIGH] for r in rows]
     lo, hi = min(lows), max(highs)
     span = max(hi - lo, 0.5)
     return [lo - span * pad, hi + span * pad]
+
+
+def margin_text(row):
+    """The 95% interval as a ± margin, at the same precision as the estimate.
+
+    Every interval here is symmetric — the CIs are the estimate ±2 standard
+    errors — so one margin states it exactly. Most are narrow (median ±0.16
+    points) and draw smaller than their dot, so this is the only way most
+    readers will ever see them.
+    """
+    # Bounds are stored to two decimals; rounding the half-width to three
+    # stops float subtraction turning a true 0.05 into 0.0499… and printing
+    # "<0.1" for a margin that rounds to 0.1.
+    half = round((row[CI_HIGH] - row[CI_LOW]) / 2, 3)
+    return "±<0.1" if half < 0.05 else f"±{half:.1f}"
 
 
 # =========================================================
@@ -233,8 +247,34 @@ def empty_figure(message, theme=None):
     return fig
 
 
+# Width of the value column to the right of each dot-and-interval panel. It
+# holds the widest label in the data ("99.9% ±3.8") at 12px with room spare.
+VALUE_COLUMN = 92
+
+
+def wrap_group(label, limit=18):
+    """Break an over-long group name at its most central ", " for display.
+
+    Only one name in the data needs it — race's 23-character "A/A Native,
+    Asian,Other", against 17 or fewer everywhere else — but it alone set the
+    width of the race panel's label column, which on a phone left its plot
+    under 80px.
+    """
+    if len(label) <= limit or ", " not in label:
+        return label
+    cuts = [i for i in range(len(label)) if label.startswith(", ", i)]
+    cut = min(cuts, key=lambda i: abs(i - len(label) / 2))
+    return label[:cut + 1] + "<br>" + label[cut + 2:]
+
+
 def build_dot_interval(rows, height, theme=None):
-    """A dot per group with its confidence interval drawn as a bar through it."""
+    """A dot per group with its interval through it and its value in a column.
+
+    The value and margin sit in a right-hand column rather than beside each
+    dot: beside the dot they needed the axis padded by half its span on each
+    side, which squeezed the intervals they were meant to show. In a column
+    they also line up, so the groups read as a ranked table.
+    """
     p = palette(theme)
     rows = sorted(rows, key=lambda r: r[PERCENT])
     labels = [r[GROUP] for r in rows]
@@ -242,20 +282,18 @@ def build_dot_interval(rows, height, theme=None):
 
     fig = go.Figure()
 
-    # Intervals first, so the dots and labels sit on top of them.
+    # Intervals first, so the dots sit on top. They are drawn heavier than the
+    # dot is wide so that any interval wider than its dot visibly overhangs it.
     for row in rows:
         fig.add_trace(go.Scatter(
             x=[row[CI_LOW], row[CI_HIGH]], y=[row[GROUP], row[GROUP]],
-            mode="lines", line=dict(color=p["blue"], width=3),
+            mode="lines", line=dict(color=p["blue"], width=4),
             opacity=p["interval_opacity"], hoverinfo="skip",
         ))
 
     fig.add_trace(go.Scatter(
-        x=values, y=labels, mode="markers+text",
-        marker=dict(size=11, color=p["blue"], line=dict(width=2, color=p["surface"])),
-        text=[f"{v:.1f}%" for v in values],
-        textposition="middle right",
-        textfont=dict(family=FONT, size=12, color=p["ink"]),
+        x=values, y=labels, mode="markers",
+        marker=dict(size=8, color=p["blue"], line=dict(width=1.5, color=p["surface"])),
         customdata=[(r[CI_LOW], r[CI_HIGH]) for r in rows],
         hovertemplate=(
             "<b>%{y}</b><br>%{x:.2f}%<br>"
@@ -263,10 +301,25 @@ def build_dot_interval(rows, height, theme=None):
         ),
     ))
 
+    value_column = [
+        dict(
+            # Anchored to the plot's right edge, shifted out into the margin
+            # and right-aligned there, so the numbers form a column.
+            x=1, xref="paper", xanchor="right", xshift=VALUE_COLUMN - 2,
+            y=row[GROUP], yref="y", showarrow=False, align="right",
+            text=(f"{row[PERCENT]:.1f}% "
+                  f"<span style='color:{p['muted']}'>{margin_text(row)}</span>"),
+            font=dict(family=FONT, size=12, color=p["ink"]),
+        )
+        for row in rows
+    ]
+
     fig.update_layout(
-        # Bottom margin leaves room for the tick labels; without it the value
-        # labels on a two-row panel sit on top of the axis.
-        **{**base_layout(p), "margin": dict(l=8, r=8, t=6, b=26)}, height=height,
+        # Bottom margin leaves room for the tick labels; without it the lowest
+        # row sits on top of the axis.
+        **{**base_layout(p), "margin": dict(l=8, r=VALUE_COLUMN, t=6, b=26)},
+        height=height,
+        annotations=value_column,
         xaxis=dict(
             range=axis_window(rows), showgrid=True, gridcolor=p["grid"],
             zeroline=False, ticksuffix="%",
@@ -274,6 +327,8 @@ def build_dot_interval(rows, height, theme=None):
         ),
         yaxis=dict(
             showgrid=False, zeroline=False,
+            # Display-only wrapping: the rows stay keyed on the real names.
+            tickvals=labels, ticktext=[wrap_group(g) for g in labels],
             tickfont=dict(family=FONT, size=12, color=p["ink"]),
         ),
     )
